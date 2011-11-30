@@ -99,7 +99,7 @@ function getLatestPlusPosts($user_id, $max_results) {
 	}
 }
 
-function insert_post_from_plus($post_title, $post_text, $publish_date, $activity_id, $hashtags) {
+function insert_post_from_plus($post_id, $post_title, $post_text, $publish_date, $activity_id, $activity_url, $hashtags) {
 	$post_status = get_option('google_plus_importer_post_status');
 	$post_type = get_option('google_plus_importer_post_type');
     $author_id = get_option('google_plus_importer_author_id');
@@ -116,8 +116,14 @@ function insert_post_from_plus($post_title, $post_text, $publish_date, $activity
       'post_type' => $post_type,
       'tags_input' => $tags
     );
-    $new_post_id = wp_insert_post($post);
-    add_post_meta($new_post_id, 'google_plus_activity_id', $activity_id, TRUE);
+	if ($post_id == -1) {
+    	$post_id = wp_insert_post($post);
+	} else {
+		$post['ID'] = $post_id;
+		wp_update_post($post);
+	}
+    add_post_meta($post_id, 'google_plus_activity_id', $activity_id, TRUE);
+    add_post_meta($post_id, 'google_plus_activity_url', $activity_url, TRUE);
 }
 
 function scan_google_plus_activity() {	
@@ -199,14 +205,25 @@ function scan_google_plus_activity() {
 				        'update_post_meta_cache' => false, // Don't pre-fetch all custom fields for the results
 				        'update_post_term_cache' => false, // Don't pre-fetch all taxonomies for the results
 				) );
-				 
 				if ( !$post_check->have_posts() ) {
+					$post_id = -1;
+					$need_update = true;
+				} else {
+					$post_id = $post_check->post->ID;
+					$need_update = md5($post_content) != md5($post_check->post->post_content);
+				}
+				if ($need_update) {
 					// Create title
-					$post_title = $item->title;
+					if (substr($item->title, strlen($item->title)-3) == '...') {
+						$post_title = preg_split("/(<br[^>]*>)|\n/", $post_content);
+						$post_title = $post_title[0];
+					} else {
+						$post_title = $item->title;
+					}
 					// If there's no title get the name of anything attached
 					if ( $post_title == '' && $item->object->attachments[0]->displayName ) $post_title = $item->object->attachments[0]->displayName;
 					// Get only the first line of the title
-					$post_title = explode("\n", $post_title);
+					$post_title = preg_split("/(<br[^>]*>)|\n/", $post_title);
 					$post_title = $post_title[0];
 					// Shorten title if it's too long
 					$max_characters = get_option('google_plus_importer_title_characters');
@@ -230,7 +247,8 @@ function scan_google_plus_activity() {
 					}
 					
 					// Insert post into WordPress
-					insert_post_from_plus($post_title, $post_content, date("Y-m-d H:i:s",strtotime($item->published)), $item->id, $hashtags);
+					echo "Updating: $post_id Post title: '".htmlentities($item->title)."'<br>";
+					insert_post_from_plus($post_id, $post_title, $post_content, date("Y-m-d H:i:s",strtotime($item->published)), $item->id, $item->url, $hashtags);
 				}
 			}
 		endif;
@@ -254,7 +272,10 @@ function via_google_plus_filter( $content ) {
 
 	$via_text = get_option('google_plus_importer_via_text');
 
-    if ( $via_text && get_post_meta($GLOBALS['post']->ID, 'google_plus_activity_id', true) ) $content = $content . "\n\n<span class=\"via-google-plus\">$via_text</span>";
+    if ( $via_text && get_post_meta($GLOBALS['post']->ID, 'google_plus_activity_id', true) ) {
+		$via_url = get_post_meta($GLOBALS['post']->ID, 'google_plus_activity_url', true);
+		$content = $content . "\n\n<span class=\"via-google-plus\"><a href=\"$via_url\">$via_text</a></span>";
+	}
 
     return $content;
 }
