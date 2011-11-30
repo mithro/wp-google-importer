@@ -151,6 +151,9 @@ function scan_google_plus_activity() {
 				
 				// Construct content
 			    $post_content = '';
+			    /*echo "<pre>";
+			    var_dump($item);
+			    echo "</pre>";*/
 			    if ($item->verb == "share" && $item->annotation) $post_content .= $item->annotation . "\n\n";
 			    if ($item->verb == "share") $post_content .= "<img src=\"" . $item->object->actor->image->url . "?sz=24\" style=\"vertical-align:middle;\"> <a href=\"" . $item->object->actor->url . "\">" . $item->object->actor->displayName . "</a> originally shared this post:\n\n";
 			    if ($item->object->content != "") $post_content .= $item->object->content . "\n";
