@@ -167,7 +167,14 @@ function scan_google_plus_activity() {
 			    	}
 			    	if ($attachment->objectType == 'photo') $post_content .= "\n<a href=\"" . $attachment->url . "\"><img src=\"" . $attachment->image->url . "\" class=\"alignleft\"></a>\n";
 			    	if ($attachment->objectType == 'video') {
-			    		if ($video_url=google_importer_video_url($attachment->url)) $post_content .= "\n$video_url\n";
+					if ($attachment->url == "javascript:void(0);") {
+						preg_match('/vi%2F([A-Za-z0-9\-_]+)%2F/', $attachment->image->url, $matches);
+						$post_content .= "\nhttp://www.youtube.com/watch?v=".$matches[1]."\n";
+                        $post_content .= "<h5>Shared video:</h5>\n";
+						$post_content .= "<blockquote>" . $attachment->content . "</blockquote>\n";
+					} else {
+				    		if ($video_url=google_importer_video_url($attachment->url)) $post_content .= "\n$video_url\n";
+					}
 			    	}
 			    }
 			    if ($item->geocode)	{
