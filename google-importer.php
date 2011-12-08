@@ -142,12 +142,17 @@ function scan_google_plus_activity() {
 
 			foreach ($results->items as $item) {
 			
+			    echo "<pre>";
+			    var_dump($item);
+			    echo "</pre>";
+
 				// See if item should be imported
-				if ($selective_tag != '') {
+				if (!$selective_tag) {
 					$content_and_annotation = strtolower(" " . $item->object->content . " " . $item->annotation . " ");
 					$pos = strpos($content_and_annotation,$selective_tag);
 					if($pos === false) {
 						// Selective tag not found
+						echo "<p>Skipping because tag '$selective_tag' is not found</p>";
 						continue;
 					}
 					else {
@@ -157,11 +162,8 @@ function scan_google_plus_activity() {
 				
 				// Construct content
 			    $post_content = '';
-			    /*echo "<pre>";
-			    var_dump($item);
-			    echo "</pre>";*/
 			    if ($item->verb == "share" && $item->annotation) $post_content .= $item->annotation . "\n\n";
-			    if ($item->verb == "share") $post_content .= "<img src=\"" . $item->object->actor->image->url . "?sz=24\" style=\"vertical-align:middle;\"> <a href=\"" . $item->object->actor->url . "\">" . $item->object->actor->displayName . "</a> originally shared this post:\n\n";
+			    if ($item->verb == "share") $post_content .= "<img src=\"" . $item->object->actor->image->url . "\" style=\"vertical-align:middle;\"> <a href=\"" . $item->object->actor->url . "\">" . $item->object->actor->displayName . "</a> originally shared this post:\n\n";
 			    if ($item->object->content != "") $post_content .= $item->object->content . "\n";
 			    if ($item->object->attachments) foreach ($item->object->attachments as $attachment) {
 			    	if ($attachment->objectType == 'article') {
@@ -190,6 +192,8 @@ function scan_google_plus_activity() {
 			    }
 			    if ($item->placeName) $post_content .= "\n" . $item->placeName . "\n";
 			    if ($item->address) $post_content .= "\n<a href=\"http://maps.google.com/?ll=$coordinates&q=$coordinates\">" . $item->address . "</a>\n";
+
+				// See if this has already been imported?
 				$post_check = new WP_Query( array(
 				        // http://codex.wordpress.org/Function_Reference/WP_Query#Custom_Field_Parameters
 				        'meta_query' => array(
@@ -205,33 +209,35 @@ function scan_google_plus_activity() {
 				        'update_post_meta_cache' => false, // Don't pre-fetch all custom fields for the results
 				        'update_post_term_cache' => false, // Don't pre-fetch all taxonomies for the results
 				) );
+
+				// Create title
+				if (substr($item->title, strlen($item->title)-3) == '...') {
+					$post_title = preg_split("/(<br[^>]*>)|\n/", $post_content);
+					$post_title = $post_title[0];
+				} else {
+					$post_title = $item->title;
+				}
+				// If there's no title get the name of anything attached
+				if ( $post_title == '' && $item->object->attachments[0]->displayName ) $post_title = $item->object->attachments[0]->displayName;
+				echo "<pre>Post title: '$post_title'</pre>";
+				// Get only the first line of the title
+				$post_title = preg_split("/(<br[^>]*>)|\n/", $post_title);
+				$post_title = $post_title[0];
+				// Shorten title if it's too long
+				$max_characters = get_option('google_plus_importer_title_characters');
+				if (strlen($post_title)>$max_characters) {
+					preg_match('/(.{' . $max_characters . '}.*?)\b/', $post_title, $matches);
+					if ( strlen(rtrim($matches[1])) < strlen($post_title) ) $post_title = rtrim($matches[1]) . "...";
+				}
+
 				if ( !$post_check->have_posts() ) {
 					$post_id = -1;
 					$need_update = true;
 				} else {
 					$post_id = $post_check->post->ID;
-					$need_update = md5($post_content) != md5($post_check->post->post_content);
+					$need_update = md5($post_content) != md5($post_check->post->post_content) || $post_check->post->post_title != $post_title;
 				}
 				if ($need_update) {
-					// Create title
-					if (substr($item->title, strlen($item->title)-3) == '...') {
-						$post_title = preg_split("/(<br[^>]*>)|\n/", $post_content);
-						$post_title = $post_title[0];
-					} else {
-						$post_title = $item->title;
-					}
-					// If there's no title get the name of anything attached
-					if ( $post_title == '' && $item->object->attachments[0]->displayName ) $post_title = $item->object->attachments[0]->displayName;
-					// Get only the first line of the title
-					$post_title = preg_split("/(<br[^>]*>)|\n/", $post_title);
-					$post_title = $post_title[0];
-					// Shorten title if it's too long
-					$max_characters = get_option('google_plus_importer_title_characters');
-					if (strlen($post_title)>$max_characters) {
-						preg_match('/(.{' . $max_characters . '}.*?)\b/', $post_title, $matches);
-						if ( strlen(rtrim($matches[1])) < strlen($post_title) ) $post_title = rtrim($matches[1]) . "...";
-					}
-					
 					// Check for hashtags
 					$hashtags = null;
 					if(get_option('google_plus_importer_hashtags')==1) {
@@ -247,8 +253,10 @@ function scan_google_plus_activity() {
 					}
 					
 					// Insert post into WordPress
-					echo "Updating: $post_id Post title: '".htmlentities($item->title)."'<br>";
+					echo "<p>Updating: $post_id Post title: '".htmlentities($post_title)."'</p>";
 					insert_post_from_plus($post_id, $post_title, $post_content, date("Y-m-d H:i:s",strtotime($item->published)), $item->id, $item->url, $hashtags);
+				} else {
+					echo "<p>Not updating: $post_id Post title: '".htmlentities($post_title)."'</p>";
 				}
 			}
 		endif;
