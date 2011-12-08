@@ -163,7 +163,7 @@ function scan_google_plus_activity() {
 				// Construct content
 			    $post_content = '';
 			    if ($item->verb == "share" && $item->annotation) $post_content .= $item->annotation . "\n\n";
-			    if ($item->verb == "share") $post_content .= "<img src=\"" . $item->object->actor->image->url . "\" style=\"vertical-align:middle;\"> <a href=\"" . $item->object->actor->url . "\">" . $item->object->actor->displayName . "</a> originally shared this post:\n\n";
+			    if ($item->verb == "share") $post_content .= "<blockquote style='overflow: auto;'><img src=\"" . $item->object->actor->image->url . "\" style=\"vertical-align:middle;\"> <a href=\"" . $item->object->actor->url . "\">" . $item->object->actor->displayName . "</a> originally shared this post:\n\n<blockquote style='overflow: auto;'>";
 			    if ($item->object->content != "") $post_content .= $item->object->content . "\n";
 			    if ($item->object->attachments) foreach ($item->object->attachments as $attachment) {
 			    	if ($attachment->objectType == 'article') {
@@ -185,6 +185,7 @@ function scan_google_plus_activity() {
 					}
 			    	}
 			    }
+                if ($item->verb == "share") $post_content .= "</blockquote></blockquote>"; 
 			    if ($item->geocode)	{
 			    	$coordinates = explode(' ',$item->geocode);
 			    	$coordinates = implode(',',$coordinates);
