@@ -1,4 +1,6 @@
 <?php
+// -*- coding: utf-8 -*-
+// vim: set ts=4 sw=4 et sts=4 ai:
 /*
 Plugin Name: Google+ Importer
 Plugin URI: http://sutherlandboswell.com/projects/google-plus-importer-for-wordpress/
@@ -99,6 +101,18 @@ function getLatestPlusPosts($user_id, $max_results) {
 	}
 }
 
+function getLatestComments($activity_id) {
+	$api_key = get_option('google_plus_importer_api_key');
+    $request = "https://www.googleapis.com/plus/v1/activities/$activity_id/comments?key=$api_key";
+	$response = wp_remote_get( $request, array( 'sslverify' => false ) );
+	if( is_wp_error( $response ) ) {
+        return array();
+    } else {
+		$response = json_decode($response['body']);
+		return $response;
+	}
+}
+
 function insert_post_from_plus($post_id, $post_title, $post_text, $publish_date, $activity_id, $activity_url, $hashtags) {
 	$post_status = get_option('google_plus_importer_post_status');
 	$post_type = get_option('google_plus_importer_post_type');
@@ -124,6 +138,44 @@ function insert_post_from_plus($post_id, $post_title, $post_text, $publish_date,
 	}
     add_post_meta($post_id, 'google_plus_activity_id', $activity_id, TRUE);
     add_post_meta($post_id, 'google_plus_activity_url', $activity_url, TRUE);
+    return $post_id;
+}
+
+function insert_comment_from_plus($post_id, $comment_id, $item) {
+    $data = array(
+        'comment_post_ID' => $post_id,
+        'comment_content' => $item->object->content,
+        'comment_parent' => 0,
+        'comment_author_IP' => '127.0.0.1',
+        'comment_agent' => 'Google+ Comment Importer',
+        'comment_date' => $item->updated,
+        'comment_date_gmt' => $item->updated,
+        'comment_approved' => 1,
+    );
+    if ($item->actor->id == get_option('google_plus_importer_user_id')) {
+        $author_id = get_option('google_plus_importer_author_id');
+        $user = get_userdata($author_id);
+        if ( empty( $user->display_name ) ) {
+            $user->display_name=$user->user_login;
+        }
+        $data['user_id'] = $author_id;
+        $data['comment_author'] = $user->display_name;
+        $data['comment_author_email'] = $user->user_email;
+        $data['comment_author_url'] = $user->user_url;
+    } else {
+        $data['user_id'] = 0;
+        $data['comment_author'] = $item->actor->displayName;
+        $data['comment_author_email'] = $item->actor->image->url;
+        $data['comment_author_url'] = $item->actor->url;
+    }
+	if ($comment_id == -1) {
+    	$comment_id = wp_insert_comment($data);
+	} else {
+		$data['comment_ID'] = $comment_id;
+		wp_update_comment($data);
+	}
+    add_comment_meta($comment_id, 'google_plus_comment_id', $item->id);
+    add_comment_meta($comment_id, 'google_plus_comment_url', $item->selfLink); 
 }
 
 function scan_google_plus_activity() {	
@@ -142,7 +194,7 @@ function scan_google_plus_activity() {
 
 			foreach ($results->items as $item) {
 			
-			    echo "<pre>";
+			    echo "<pre style='display: none;'>";
 			    var_dump($item);
 			    echo "</pre>";
 
@@ -194,6 +246,26 @@ function scan_google_plus_activity() {
 			    if ($item->placeName) $post_content .= "\n" . $item->placeName . "\n";
 			    if ($item->address) $post_content .= "\n<a href=\"http://maps.google.com/?ll=$coordinates&q=$coordinates\">" . $item->address . "</a>\n";
 
+				// Create title
+				if (substr($item->title, strlen($item->title)-3) == '...') {
+					$post_title = preg_split("/(<br[^>]*>)|\n/", $post_content);
+					$post_title = $post_title[0];
+				} else {
+					$post_title = $item->title;
+				}
+				// If there's no title get the name of anything attached
+				if ( $post_title == '' && $item->object->attachments[0]->displayName ) $post_title = $item->object->attachments[0]->displayName;
+
+				// Get only the first line of the title
+				$post_title = preg_split("/(<br[^>]*>)|\n/", $post_title);
+				$post_title = $post_title[0];
+				// Shorten title if it's too long
+				$max_characters = get_option('google_plus_importer_title_characters');
+				if (strlen($post_title)>$max_characters) {
+					preg_match('/(.{' . $max_characters . '}.*?)\b/', $post_title, $matches);
+					if ( strlen(rtrim($matches[1])) < strlen($post_title) ) $post_title = rtrim($matches[1]) . "...";
+				}
+
 				// See if this has already been imported?
 				$post_check = new WP_Query( array(
 				        // http://codex.wordpress.org/Function_Reference/WP_Query#Custom_Field_Parameters
@@ -211,32 +283,14 @@ function scan_google_plus_activity() {
 				        'update_post_term_cache' => false, // Don't pre-fetch all taxonomies for the results
 				) );
 
-				// Create title
-				if (substr($item->title, strlen($item->title)-3) == '...') {
-					$post_title = preg_split("/(<br[^>]*>)|\n/", $post_content);
-					$post_title = $post_title[0];
-				} else {
-					$post_title = $item->title;
-				}
-				// If there's no title get the name of anything attached
-				if ( $post_title == '' && $item->object->attachments[0]->displayName ) $post_title = $item->object->attachments[0]->displayName;
-				echo "<pre>Post title: '$post_title'</pre>";
-				// Get only the first line of the title
-				$post_title = preg_split("/(<br[^>]*>)|\n/", $post_title);
-				$post_title = $post_title[0];
-				// Shorten title if it's too long
-				$max_characters = get_option('google_plus_importer_title_characters');
-				if (strlen($post_title)>$max_characters) {
-					preg_match('/(.{' . $max_characters . '}.*?)\b/', $post_title, $matches);
-					if ( strlen(rtrim($matches[1])) < strlen($post_title) ) $post_title = rtrim($matches[1]) . "...";
-				}
-
 				if ( !$post_check->have_posts() ) {
 					$post_id = -1;
 					$need_update = true;
 				} else {
 					$post_id = $post_check->post->ID;
-					$need_update = md5($post_content) != md5($post_check->post->post_content) || $post_check->post->post_title != $post_title;
+                    if ($post_id > 0) {
+    					$need_update = md5($post_content) != md5($post_check->post->post_content) || $post_check->post->post_title != $post_title;
+                    }
 				}
 				if ($need_update) {
 					// Check for hashtags
@@ -254,11 +308,34 @@ function scan_google_plus_activity() {
 					}
 					
 					// Insert post into WordPress
-					echo "<p>Updating: $post_id Post title: '".htmlentities($post_title)."'</p>";
-					insert_post_from_plus($post_id, $post_title, $post_content, date("Y-m-d H:i:s",strtotime($item->published)), $item->id, $item->url, $hashtags);
+					echo "<p>Updating: $post_id Post title: '".htmlentities($post_title)."'";
+					$post_id = insert_post_from_plus($post_id, $post_title, $post_content, date("Y-m-d H:i:s",strtotime($item->published)), $item->id, $item->url, $hashtags);
+					echo " - Post ID now: $post_id</p>";
 				} else {
 					echo "<p>Not updating: $post_id Post title: '".htmlentities($post_title)."'</p>";
 				}
+
+                $post_comments = get_comments(array(
+                    'post_id' => $post_id,
+                ));
+                $comment_plus2post = array();
+			    foreach ($post_comments as $post_comment) {
+                    $comment_plus_id = get_comment_meta($post_comment->comment_ID, 'google_plus_comment_id', true);
+                    if (strlen($comment_plus_id) > 0) {
+                        $comment_plus2post[$comment_plus_id] = $post_comment->comment_ID;
+                    }
+                }
+                $plus_comments = getLatestComments($item->id);
+			    foreach ($plus_comments->items as $plus_comment) {
+                    if (isset($comment_plus2post[$plus_comment->id])) {
+                        $comment_id = $comment_plus2post[$plus_comment->id];
+                        echo "<p>Updating: {$plus_comment->id} - $comment_id ".htmlentities($plus_comment->object->content)."</p>";
+                    } else {
+                        echo "<p>Inserting: {$plus_comment->id}".htmlentities($plus_comment->object->content)."</p>";
+                        $comment_id = -1;
+                    }
+                    insert_comment_from_plus($post_id, $comment_id, $plus_comment);
+                }
 			}
 		endif;
     }
