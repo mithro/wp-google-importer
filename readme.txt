@@ -1,10 +1,9 @@
-=== Google+ Importer ===
-Contributors: sutherlandboswell
-Donate link: https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=sutherland%2eboswell%40gmail%2ecom&lc=US&item_name=Sutherland%20Boswell&currency_code=USD&bn=PP%2dDonationsBF%3abtn_donate_LG%2egif%3aNonHosted
+=== Google+ Importer+Comment ===
+Contributors: mithro
 Tags: google plus, import, social, google
 Requires at least: 3.0
 Tested up to: 3.2.1
-Stable tag: 1.1
+Stable tag: 0.1
 
 Automatically create new WordPress posts from your activity on Google+ using Google+ Importer
 

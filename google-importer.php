@@ -113,6 +113,22 @@ function getLatestComments($activity_id) {
 	}
 }
 
+
+function get_avatar_google($avatar, $id_or_email, $size, $default, $alt) {
+
+    if (isset($id_or_email->comment_ID)) {
+        $plus_avatar = get_comment_meta($id_or_email->comment_ID, 'google_plus_comment_avatar', true);
+        $matches = array();
+        if (preg_match('/(https:\/\/.*\.googleusercontent\.com.*)\?sz=\d+/', $plus_avatar, $matches)) {
+            return "<img alt='{$safe_alt}' src='{$matches[1]}?sz=$size' class='avatar avatar-{$size} photo' height='{$size}' width='{$size}' />";
+        }
+    }
+    return $avatar;
+}
+
+add_filter( 'get_avatar', 'get_avatar_google', 1, 5);
+
+
 function insert_post_from_plus($post_id, $post_title, $post_text, $publish_date, $activity_id, $activity_url, $hashtags) {
 	$post_status = get_option('google_plus_importer_post_status');
 	$post_type = get_option('google_plus_importer_post_type');
@@ -125,13 +141,13 @@ function insert_post_from_plus($post_id, $post_title, $post_text, $publish_date,
       'post_author' => $author_id,
       'post_category' => array($category_id),
       'post_content' => $post_text,
-      'post_date' => $publish_date,
+      'post_date_gmt' => $publish_date,
       'post_status' => $post_status,
       'post_type' => $post_type,
       'tags_input' => $tags
     );
 	if ($post_id == -1) {
-    	$post_id = wp_insert_post($post);
+  //  	$post_id = wp_insert_post($post);
 	} else {
 		$post['ID'] = $post_id;
 		wp_update_post($post);
@@ -148,7 +164,6 @@ function insert_comment_from_plus($post_id, $comment_id, $item) {
         'comment_parent' => 0,
         'comment_author_IP' => '127.0.0.1',
         'comment_agent' => 'Google+ Comment Importer',
-        'comment_date' => $item->updated,
         'comment_date_gmt' => $item->updated,
         'comment_approved' => 1,
     );
@@ -169,13 +184,14 @@ function insert_comment_from_plus($post_id, $comment_id, $item) {
         $data['comment_author_url'] = $item->actor->url;
     }
 	if ($comment_id == -1) {
-    	$comment_id = wp_insert_comment($data);
+//    	$comment_id = wp_insert_comment($data);
 	} else {
 		$data['comment_ID'] = $comment_id;
 		wp_update_comment($data);
 	}
     add_comment_meta($comment_id, 'google_plus_comment_id', $item->id);
     add_comment_meta($comment_id, 'google_plus_comment_url', $item->selfLink); 
+    add_comment_meta($comment_id, 'google_plus_comment_avatar', $item->actor->image->url); 
 }
 
 function scan_google_plus_activity() {	
