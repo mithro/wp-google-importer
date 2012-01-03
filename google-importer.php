@@ -152,8 +152,8 @@ function insert_post_from_plus($post_id, $post_title, $post_text, $publish_date,
 		$post['ID'] = $post_id;
 		wp_update_post($post);
 	}
-    add_post_meta($post_id, 'google_plus_activity_id', $activity_id, TRUE);
-    add_post_meta($post_id, 'google_plus_activity_url', $activity_url, TRUE);
+    update_post_meta($post_id, 'google_plus_activity_id', $activity_id, TRUE);
+    update_post_meta($post_id, 'google_plus_activity_url', $activity_url, TRUE);
     return $post_id;
 }
 
@@ -189,9 +189,9 @@ function insert_comment_from_plus($post_id, $comment_id, $item) {
 		$data['comment_ID'] = $comment_id;
 		wp_update_comment($data);
 	}
-    add_comment_meta($comment_id, 'google_plus_comment_id', $item->id);
-    add_comment_meta($comment_id, 'google_plus_comment_url', $item->selfLink); 
-    add_comment_meta($comment_id, 'google_plus_comment_avatar', $item->actor->image->url); 
+    update_comment_meta($comment_id, 'google_plus_comment_id', $item->id);
+    update_comment_meta($comment_id, 'google_plus_comment_url', $item->selfLink); 
+    update_comment_meta($comment_id, 'google_plus_comment_avatar', $item->actor->image->url); 
 }
 
 function scan_google_plus_activity() {	
